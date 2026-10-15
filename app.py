@@ -133,4 +133,4 @@ tab1, tab2, tab3 = st.tabs([
 # ==============================================================================
 with tab1:
     st.subheader("1. Interactive Portfolio Editor")
-    st.caption("Edit quantities, buy
+    st.caption("Edit quantities, buy prices, or add/remove rows directly inside the table. Click Save & Recalculate to update Gemini context.")
