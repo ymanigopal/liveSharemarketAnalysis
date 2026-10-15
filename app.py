@@ -17,4 +17,4 @@ gemini_key = st.secrets.get("GEMINI_API_KEY", None)
 
 with st.sidebar:
     st.header("⚙️ Configuration")
-    if not gemini_
+    if not gemini:
