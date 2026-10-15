@@ -14,7 +14,7 @@ st.set_page_config(page_title="Personal AI Stock Analyst", layout="wide", page_i
 PORTFOLIO_FILE = "my_portfolio.json"
 CONTACTS_FILE = "phone_numbers.json"
 
-# --- INITIALIZE DEFAULT PORTFOLIO (23 STOCKS) ---
+# --- INITIALIZE DEFAULT PORTFOLIO (YOUR 23 STOCKS) ---
 DEFAULT_PORTFOLIO = [
     {"Ticker": "AVANTEL.NS", "Name": "Avantel", "Market": "IN", "Theme": "Defence", "Qty": 100, "Buy_Price": 150.0},
     {"Ticker": "BDL.NS", "Name": "Bharat Dynamics", "Market": "IN", "Theme": "Defence", "Qty": 50, "Buy_Price": 1200.0},
@@ -43,11 +43,8 @@ DEFAULT_PORTFOLIO = [
 
 def load_data(file_path, default_data):
     if os.path.exists(file_path):
-        try:
-            with open(file_path, "r") as f:
-                return json.load(f)
-        except Exception:
-            return default_data
+        with open(file_path, "r") as f:
+            return json.load(f)
     return default_data
 
 def save_data(file_path, data):
@@ -65,11 +62,8 @@ if "contacts" not in st.session_state:
 # --- SIDEBAR: API & SETTINGS ---
 with st.sidebar:
     st.header("🔑 API Configuration")
-    gemini_key = st.secrets.get("GEMINI_API_KEY", "")
-    if not gemini_key:
-        gemini_key = st.text_input("Gemini API Key", type="password")
-    
-    model_choice = st.selectbox("Gemini Model", ["gemini-2.5-flash", "gemini-2.5-pro"])
+    gemini_key = st.text_input("Gemini API Key", type="password")
+    model_choice = st.selectbox("Gemini Model", ["gemini-3.8-flash", "gemini-4-argon"])
     
     st.divider()
     st.subheader("📱 Twilio Alert Credentials")
@@ -91,22 +85,19 @@ def fetch_live_prices(df, fx_rate):
             stock = yf.Ticker(ticker)
             hist = stock.history(period="5d")
             if not hist.empty and len(hist) >= 2:
-                ltp = round(float(hist["Close"].iloc[-1]), 2)
-                prev = float(hist["Close"].iloc[-2])
+                ltp = round(hist["Close"].iloc[-1], 2)
+                prev = hist["Close"].iloc[-2]
                 day_chg = round(((ltp - prev) / prev) * 100, 2)
-            elif not hist.empty:
-                ltp = round(float(hist["Close"].iloc[-1]), 2)
-                day_chg = 0.0
             else:
-                ltp = float(row["Buy_Price"])
+                ltp = row["Buy_Price"]
                 day_chg = 0.0
         except Exception:
-            ltp = float(row["Buy_Price"])
+            ltp = row["Buy_Price"]
             day_chg = 0.0
             
         mult = fx_rate if row["Market"] == "US" else 1.0
-        inv_inr = round(float(row["Qty"]) * float(row["Buy_Price"]) * mult, 0)
-        cur_inr = round(float(row["Qty"]) * ltp * mult, 0)
+        inv_inr = round(row["Qty"] * row["Buy_Price"] * mult, 0)
+        cur_inr = round(row["Qty"] * ltp * mult, 0)
         pnl_pct = round(((cur_inr - inv_inr) / inv_inr) * 100, 2) if inv_inr > 0 else 0.0
         
         r_dict = row.to_dict()
@@ -120,7 +111,7 @@ def fetch_live_prices(df, fx_rate):
         updated_rows.append(r_dict)
     return pd.DataFrame(updated_rows)
 
-# --- MAIN UI TABS ---
+# --- MAIN UI TABS ("SLIDES") ---
 st.title("📊 Personal Stock Market & Gemini Analyst Hub")
 tab1, tab2, tab3 = st.tabs([
     "💼 Slide 1: Portfolio & Gemini Analyst", 
@@ -133,7 +124,7 @@ tab1, tab2, tab3 = st.tabs([
 # ==============================================================================
 with tab1:
     st.subheader("1. Interactive Portfolio Editor")
-    st.caption("Edit quantities, buy prices, or add/remove rows directly inside the table. Click **Save & Recalculate** to update Gemini's context.")
+    st.caption("Edit quantities, buy prices, or add/remove rows directly inside the table. Click *Save & Recalculate* to update Gemini's context.")
     
     edited_df = st.data_editor(
         st.session_state.portfolio,
@@ -234,7 +225,7 @@ with tab2:
             metrics_data = {
                 "Metric": ["Market Cap", "Trailing P/E", "Forward P/E", "ROE", "Debt to Equity", "52-Week High", "52-Week Low"],
                 "Value": [
-                    f"{info.get('marketCap', 'N/A'):,}" if isinstance(info.get('marketCap'), (int, float)) else "N/A",
+                    f"{info.get('marketCap', 'N/A'):,}" if isinstance(info.get('marketCap'), int) else "N/A",
                     str(info.get("trailingPE", "N/A")),
                     str(info.get("forwardPE", "N/A")),
                     f"{round(info.get('returnOnEquity', 0)*100, 2)}%" if info.get('returnOnEquity') else "N/A",
@@ -248,26 +239,26 @@ with tab2:
             st.info("Detailed valuation ratios unavailable for this ticker via Yahoo Finance feed.")
 
     with col_s2:
-        st.markdown(f"#### Quarterly Income Statement & Results (`{selected_ticker}`)")
+        st.markdown(f"#### Quarterly Income Statement & Results ({selected_ticker})")
         try:
             q_fin = stock_obj.quarterly_income_stmt
             if q_fin is not None and not q_fin.empty:
                 key_rows = [r for r in ["Total Revenue", "Operating Income", "EBITDA", "Net Income"] if r in q_fin.index]
                 st.dataframe(q_fin.loc[key_rows], use_container_width=True)
             else:
-                st.info("Quarterly table not directly populated in feed—use the Gemini Deep-Dive button below for latest filings.")
+                st.info("Quarterly table not directly populated in feed—use the Gemini Deep-Dive button below for latest NSE/BSE filing numbers.")
         except Exception:
             st.info("Quarterly financials unavailable in raw feed.")
 
-        st.markdown(f"#### Latest News & Announcements (`{selected_ticker}`)")
+        st.markdown(f"#### Latest News & Announcements ({selected_ticker})")
         try:
             news_list = stock_obj.news
             if news_list:
                 for item in news_list[:5]:
                     content = item.get("content", item)
                     title = content.get("title", "Market Update")
-                    pub_date = str(content.get("pubDate", ""))
-                    st.markdown(f"- **{title}** *(Published: {pub_date[:10]})*")
+                    pub_date = content.get("pubDate", "")
+                    st.markdown(f"- *{title}* (Published: {pub_date[:10]})")
             else:
                 st.write("No recent articles found in the default feed.")
         except Exception:
@@ -286,18 +277,15 @@ with tab2:
                     2. Recent order wins, capex updates, or regulatory changes.
                     3. Whether the 3-5 year investment thesis is strengthened or weakened.
                     """
-                    try:
-                        res = client.models.generate_content(model=model_choice, contents=q_prompt)
-                        st.markdown(res.text)
-                    except Exception as e:
-                        st.error(f"Gemini API Error: {e}")
+                    res = client.models.generate_content(model=model_choice, contents=q_prompt)
+                    st.markdown(res.text)
 
 # ==============================================================================
-# SLIDE 3: WHATSAPP & SMS REMINDER MANAGER
+# SLIDE 3: WHATSAPP & SMS REMINDER MANAGER (MULTI-NUMBER SUPPORT)
 # ==============================================================================
 with tab3:
     st.subheader("📲 Daily WhatsApp & SMS Notification Center")
-    st.caption("Add, modify, or toggle phone numbers below. Always include the country code (e.g., `+91` for India or `+1` for US).")
+    st.caption("Add, modify, or toggle phone numbers below. Always include the country code (e.g., +91 for India or +1 for US).")
     
     contacts_df = pd.DataFrame(st.session_state.contacts)
     edited_contacts = st.data_editor(
@@ -321,17 +309,16 @@ with tab3:
     st.divider()
     st.markdown("#### Dispatch Portfolio Digest Now")
     
-    top_stock = live_df.sort_values('Current_INR', ascending=False).iloc[0]['Name'] if not live_df.empty else "N/A"
     default_msg = (
-        f"📊 *Daily Portfolio Update ({datetime.now().strftime('%d %b %Y')})*\n"
+        f"📊 Daily Portfolio Update ({datetime.now().strftime('%d %b %Y')})\n"
         f"• Current Value: ₹{total_cur:,.0f}\n"
         f"• Overall PnL: ₹{overall_pnl:,.0f} ({overall_pnl_pct}%)\n"
-        f"• Top Holding: {top_stock}\n\n"
+        f"• Top Holding: {live_df.sort_values('Current_INR', ascending=False).iloc[0]['Name']}\n\n"
     )
     if "latest_ai_report" in st.session_state:
-        default_msg += "🧠 *Gemini Analyst Summary:*\n" + st.session_state.latest_ai_report[:600] + "..."
+        default_msg += "🧠 Gemini Analyst Summary:\n" + st.session_state.latest_ai_report[:600] + "..."
     else:
-        default_msg += "💡 *Tip:* Generate a Gemini Report on Slide 1 first to include AI insights in this alert."
+        default_msg += "💡 Tip: Generate a Gemini Report on Slide 1 first to include AI insights in this alert."
 
     custom_msg = st.text_area("Message Preview (Editable before sending):", value=default_msg, height=200)
 
@@ -339,35 +326,32 @@ with tab3:
         if not twilio_sid or not twilio_token:
             st.error("Please enter your Twilio Account SID and Auth Token in the sidebar.")
         else:
-            try:
-                twilio_client = Client(twilio_sid, twilio_token)
-                active_recipients = [c for c in st.session_state.contacts if c.get("Active")]
+            twilio_client = Client(twilio_sid, twilio_token)
+            active_recipients = [c for c in st.session_state.contacts if c.get("Active")]
+            
+            if not active_recipients:
+                st.warning("No active phone numbers selected! Check the 'Receive Daily Alerts?' box above.")
+            
+            for person in active_recipients:
+                phone = person["Phone"].strip()
+                channel = person["Channel"]
+                name = person["Name"]
                 
-                if not active_recipients:
-                    st.warning("No active phone numbers selected! Check the 'Receive Daily Alerts?' box above.")
-                
-                for person in active_recipients:
-                    phone = person["Phone"].strip()
-                    channel = person["Channel"]
-                    name = person["Name"]
-                    
-                    try:
-                        if channel in ["WhatsApp", "Both"]:
-                            msg = twilio_client.messages.create(
-                                body=custom_msg,
-                                from_=twilio_whatsapp_from,
-                                to=f"whatsapp:{phone}"
-                            )
-                            st.success(f"WhatsApp alert sent to {name} ({phone}) — SID: {msg.sid}")
-                            
-                        if channel in ["SMS", "Both"]:
-                            msg = twilio_client.messages.create(
-                                body=custom_msg,
-                                from_=twilio_sms_from,
-                                to=phone
-                            )
-                            st.success(f"SMS alert sent to {name} ({phone}) — SID: {msg.sid}")
-                    except Exception as e:
-                        st.error(f"Failed to send alert to {name} ({phone}): {e}")
-            except Exception as e:
-                st.error(f"Twilio Client initialization error: {e}")
+                try:
+                    if channel in ["WhatsApp", "Both"]:
+                        msg = twilio_client.messages.create(
+                            body=custom_msg,
+                            from_=twilio_whatsapp_from,
+                            to=f"whatsapp:{phone}"
+                        )
+                        st.success(f"WhatsApp alert sent to {name} ({phone}) — SID: {msg.sid}")
+                        
+                    if channel in ["SMS", "Both"]:
+                        msg = twilio_client.messages.create(
+                            body=custom_msg,
+                            from_=twilio_sms_from,
+                            to=phone
+                        )
+                        st.success(f"SMS alert sent to {name} ({phone}) — SID: {msg.sid}")
+                except Exception as e:
+                    st.error(f"Failed to send alert to {name} ({phone}): {e}")
